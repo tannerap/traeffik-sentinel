@@ -19,8 +19,15 @@ DEFAULT_RETRY_WAIT = 60
 DEFAULT_CURL_TIMEOUT = 15
 DEFAULT_TRAEFIK_CONTAINER = "traefik"
 DEFAULT_WATCHDOG_CONTAINER = "traeffik-sentinel"
+DEFAULT_SKIP_CONTAINERS = "traefik,portainer,traeffik-sentinel"
 
 logger = logging.getLogger("watchdog")
+
+
+def parse_skip_containers(raw: str, traefik_container: str, watchdog_container: str) -> set[str]:
+    names = {name.strip() for name in raw.split(",") if name.strip()}
+    names.update({traefik_container, watchdog_container})
+    return names
 
 
 def setup_logging() -> None:
@@ -89,6 +96,8 @@ def handle_target_failure(
     traefik_container: str,
     retry_wait: int,
     curl_timeout: int,
+    *,
+    enable_traefik_restart: bool,
 ) -> None:
     logger.error(
         "Target unreachable: %s (container: %s, router: %s)",
@@ -119,6 +128,13 @@ def handle_target_failure(
         target.url,
     )
 
+    if not enable_traefik_restart:
+        logger.warning(
+            "Skipping Traefik restart for %s (ENABLE_TRAEFIK_RESTART=false)",
+            target.url,
+        )
+        return
+
     try:
         restart_container(client, traefik_container)
     except (DockerException, RuntimeError) as exc:
@@ -131,13 +147,15 @@ def run_cycle(
     traefik_container: str,
     retry_wait: int,
     curl_timeout: int,
+    *,
+    enable_traefik_restart: bool,
 ) -> None:
     targets = discover_targets(client, skip_containers=skip_containers)
 
     if not targets:
-        logger.warning(
-            "No Traefik targets discovered. Ensure containers expose "
-            "traefik.http.routers.<name>.rule labels with Host(`...`)."
+        logger.info(
+            "No watchdog targets discovered. Add label watchdog.enable=true "
+            "to containers that should be monitored."
         )
         return
 
@@ -157,6 +175,7 @@ def run_cycle(
             traefik_container,
             retry_wait,
             curl_timeout,
+            enable_traefik_restart=enable_traefik_restart,
         )
 
 
@@ -168,18 +187,28 @@ def main() -> None:
     curl_timeout = int(os.getenv("CURL_TIMEOUT", str(DEFAULT_CURL_TIMEOUT)))
     traefik_container = os.getenv("TRAEFIK_CONTAINER", DEFAULT_TRAEFIK_CONTAINER)
     watchdog_container = os.getenv("WATCHDOG_CONTAINER", DEFAULT_WATCHDOG_CONTAINER)
+    skip_containers = parse_skip_containers(
+        os.getenv("SKIP_CONTAINERS", DEFAULT_SKIP_CONTAINERS),
+        traefik_container,
+        watchdog_container,
+    )
+    enable_traefik_restart = (
+        os.getenv("ENABLE_TRAEFIK_RESTART", "false").lower() == "true"
+    )
 
     if check_interval <= 0:
         raise ValueError("CHECK_INTERVAL must be greater than 0")
     if retry_wait <= 0:
         raise ValueError("RETRY_WAIT must be greater than 0")
 
-    skip_containers = {traefik_container, watchdog_container}
     logger.info(
-        "Watchdog started (interval=%ss, retry_wait=%ss, traefik=%s, discovery=labels)",
+        "Watchdog started (interval=%ss, retry_wait=%ss, traefik=%s, "
+        "traefik_restart=%s, skip=%s)",
         check_interval,
         retry_wait,
         traefik_container,
+        enable_traefik_restart,
+        ",".join(sorted(skip_containers)),
     )
 
     try:
@@ -196,6 +225,7 @@ def main() -> None:
                 traefik_container,
                 retry_wait,
                 curl_timeout,
+                enable_traefik_restart=enable_traefik_restart,
             )
         except Exception:
             logger.exception("Unexpected error during health check cycle")

@@ -1,7 +1,6 @@
 FROM python:3-alpine
 
-RUN apk add --no-cache curl \
-    && echo 'watchdog:x:0:0:watchdog:/:/sbin/nologin' >> /etc/passwd
+RUN apk add --no-cache curl
 
 WORKDIR /app
 

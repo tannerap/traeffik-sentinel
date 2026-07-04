@@ -12,4 +12,6 @@ services:
       CURL_TIMEOUT: "15"
       TRAEFIK_CONTAINER: traefik
       WATCHDOG_CONTAINER: traeffik-sentinel
+      SKIP_CONTAINERS: traefik,portainer,traeffik-sentinel
+      ENABLE_TRAEFIK_RESTART: "false"
       DEFAULT_SCHEME: https
