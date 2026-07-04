@@ -60,7 +60,7 @@ traefik.http.routers.api.entrypoints: websecure
 ## Voraussetzungen
 
 - Docker Socket (`/var/run/docker.sock`) muss gemountet sein (wie bei Traefik)
-- Der Container läuft als root, damit der Socket-Zugriff ohne `group_add` funktioniert
+- Der Container läuft explizit als root (`user: "0:0"`), damit der Socket-Zugriff funktioniert — auch wenn Portainer noch einen alten `watchdog`-User aus früheren Images übernommen hat
 - Überwachte Container müssen Traefik-Router-Labels mit `Host(...)` besitzen
 - URLs müssen von innerhalb des Watchdog-Containers erreichbar sein (öffentliche Traefik-Routen)
 
@@ -80,6 +80,7 @@ services:
   watchdog:
     image: ghcr.io/tannerap/traeffik-sentinel:latest
     container_name: traeffik-sentinel
+    user: "0:0"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

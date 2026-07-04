@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY watchdog/watchdog.py watchdog/discovery.py ./
 
+USER root
+
 ENV CHECK_INTERVAL=300 \
     RETRY_WAIT=60 \
     CURL_TIMEOUT=15 \
