@@ -39,13 +39,25 @@ def setup_logging() -> None:
     )
 
 
+def _is_healthy_status(status_code: str) -> bool:
+    if not status_code.isdigit():
+        return False
+
+    code = int(status_code)
+    if 200 <= code < 400:
+        return True
+
+    # Auth-protected services (e.g. Plex) are reachable but return 401/403.
+    return code in (401, 403)
+
+
 def check_url(url: str, timeout: int) -> bool:
     """Perform an active curl check against the public URL."""
     try:
         result = subprocess.run(
             [
                 "curl",
-                "-fsS",
+                "-sS",
                 "-o",
                 "/dev/null",
                 "-w",
@@ -64,16 +76,16 @@ def check_url(url: str, timeout: int) -> bool:
         logger.warning("curl check failed for %s: %s", url, exc)
         return False
 
+    status_code = result.stdout.strip()
+    if _is_healthy_status(status_code):
+        logger.info("OK %s (HTTP %s)", url, status_code)
+        return True
+
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if stderr:
             logger.warning("curl error for %s: %s", url, stderr)
         return False
-
-    status_code = result.stdout.strip()
-    if status_code.startswith(("2", "3")):
-        logger.info("OK %s (HTTP %s)", url, status_code)
-        return True
 
     logger.warning("Unexpected HTTP status for %s: %s", url, status_code or "unknown")
     return False
