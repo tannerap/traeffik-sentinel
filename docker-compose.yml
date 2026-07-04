@@ -6,8 +6,6 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    group_add:
-      - "${DOCKER_GID:?Set DOCKER_GID to the host docker group GID}"
     environment:
       CHECK_INTERVAL: "300"
       RETRY_WAIT: "60"
