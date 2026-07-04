@@ -3,32 +3,24 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 
 import docker
 from docker.errors import DockerException, NotFound
 
-DEFAULT_CONFIG_PATH = "/app/config/targets.json"
+from discovery import Target, discover_targets
+
 DEFAULT_CHECK_INTERVAL = 300
 DEFAULT_RETRY_WAIT = 60
 DEFAULT_CURL_TIMEOUT = 15
 DEFAULT_TRAEFIK_CONTAINER = "traefik"
+DEFAULT_WATCHDOG_CONTAINER = "traeffik-sentinel"
 
 logger = logging.getLogger("watchdog")
-
-
-@dataclass(frozen=True)
-class Target:
-    url: str
-    container: str
 
 
 def setup_logging() -> None:
@@ -38,29 +30,6 @@ def setup_logging() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
         stream=sys.stdout,
     )
-
-
-def load_targets(config_path: Path) -> list[Target]:
-    with config_path.open(encoding="utf-8") as config_file:
-        data: dict[str, Any] = json.load(config_file)
-
-    raw_targets = data.get("targets")
-    if not isinstance(raw_targets, list) or not raw_targets:
-        raise ValueError("Config must contain a non-empty 'targets' list")
-
-    targets: list[Target] = []
-    for index, entry in enumerate(raw_targets, start=1):
-        if not isinstance(entry, dict):
-            raise ValueError(f"Target #{index} must be an object")
-
-        url = entry.get("url")
-        container = entry.get("container")
-        if not url or not container:
-            raise ValueError(f"Target #{index} requires 'url' and 'container'")
-
-        targets.append(Target(url=str(url), container=str(container)))
-
-    return targets
 
 
 def check_url(url: str, timeout: int) -> bool:
@@ -121,7 +90,12 @@ def handle_target_failure(
     retry_wait: int,
     curl_timeout: int,
 ) -> None:
-    logger.error("Target unreachable: %s (container: %s)", target.url, target.container)
+    logger.error(
+        "Target unreachable: %s (container: %s, router: %s)",
+        target.url,
+        target.container,
+        target.router,
+    )
 
     try:
         restart_container(client, target.container)
@@ -153,14 +127,28 @@ def handle_target_failure(
 
 def run_cycle(
     client: docker.DockerClient,
-    targets: list[Target],
+    skip_containers: set[str],
     traefik_container: str,
     retry_wait: int,
     curl_timeout: int,
 ) -> None:
-    logger.info("Starting health check cycle for %d target(s)", len(targets))
+    targets = discover_targets(client, skip_containers=skip_containers)
 
+    if not targets:
+        logger.warning(
+            "No Traefik targets discovered. Ensure containers expose "
+            "traefik.http.routers.<name>.rule labels with Host(`...`)."
+        )
+        return
+
+    logger.info("Starting health check cycle for %d target(s)", len(targets))
     for target in targets:
+        logger.info(
+            "Checking %s (container: %s, router: %s)",
+            target.url,
+            target.container,
+            target.router,
+        )
         if check_url(target.url, curl_timeout):
             continue
         handle_target_failure(
@@ -175,21 +163,20 @@ def run_cycle(
 def main() -> None:
     setup_logging()
 
-    config_path = Path(os.getenv("CONFIG_PATH", DEFAULT_CONFIG_PATH))
     check_interval = int(os.getenv("CHECK_INTERVAL", str(DEFAULT_CHECK_INTERVAL)))
     retry_wait = int(os.getenv("RETRY_WAIT", str(DEFAULT_RETRY_WAIT)))
     curl_timeout = int(os.getenv("CURL_TIMEOUT", str(DEFAULT_CURL_TIMEOUT)))
     traefik_container = os.getenv("TRAEFIK_CONTAINER", DEFAULT_TRAEFIK_CONTAINER)
+    watchdog_container = os.getenv("WATCHDOG_CONTAINER", DEFAULT_WATCHDOG_CONTAINER)
 
     if check_interval <= 0:
         raise ValueError("CHECK_INTERVAL must be greater than 0")
     if retry_wait <= 0:
         raise ValueError("RETRY_WAIT must be greater than 0")
 
-    logger.info("Loading targets from %s", config_path)
-    targets = load_targets(config_path)
+    skip_containers = {traefik_container, watchdog_container}
     logger.info(
-        "Watchdog started (interval=%ss, retry_wait=%ss, traefik=%s)",
+        "Watchdog started (interval=%ss, retry_wait=%ss, traefik=%s, discovery=labels)",
         check_interval,
         retry_wait,
         traefik_container,
@@ -203,7 +190,13 @@ def main() -> None:
 
     while True:
         try:
-            run_cycle(client, targets, traefik_container, retry_wait, curl_timeout)
+            run_cycle(
+                client,
+                skip_containers,
+                traefik_container,
+                retry_wait,
+                curl_timeout,
+            )
         except Exception:
             logger.exception("Unexpected error during health check cycle")
 
