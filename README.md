@@ -59,7 +59,8 @@ traefik.http.routers.api.entrypoints: websecure
 
 ## Voraussetzungen
 
-- Docker Socket (`/var/run/docker.sock`) muss gemountet sein
+- Docker Socket (`/var/run/docker.sock`) muss gemountet sein (wie bei Traefik)
+- Der Container läuft als root, damit der Socket-Zugriff ohne `group_add` funktioniert
 - Überwachte Container müssen Traefik-Router-Labels mit `Host(...)` besitzen
 - URLs müssen von innerhalb des Watchdog-Containers erreichbar sein (öffentliche Traefik-Routen)
 

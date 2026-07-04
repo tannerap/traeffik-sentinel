@@ -1,8 +1,6 @@
 FROM python:3-alpine
 
-RUN apk add --no-cache curl \
-    && addgroup -S watchdog \
-    && adduser -S watchdog -G watchdog
+RUN apk add --no-cache curl
 
 WORKDIR /app
 
@@ -10,8 +8,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY watchdog/watchdog.py watchdog/discovery.py ./
-
-USER watchdog
 
 ENV CHECK_INTERVAL=300 \
     RETRY_WAIT=60 \
