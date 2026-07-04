@@ -1,3 +1,4 @@
 config/targets.json
 __pycache__/
 *.pyc
+.venv/
