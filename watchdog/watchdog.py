@@ -39,16 +39,19 @@ def setup_logging() -> None:
     )
 
 
+GATEWAY_FAILURE_CODES = frozenset({502, 503, 504})
+
+
 def _is_healthy_status(status_code: str) -> bool:
+    """Treat any HTTP response as healthy except Traefik/backend gateway failures."""
     if not status_code.isdigit():
         return False
 
     code = int(status_code)
-    if 200 <= code < 400:
-        return True
+    if code < 100:
+        return False
 
-    # Auth-protected services (e.g. Plex) are reachable but return 401/403.
-    return code in (401, 403)
+    return code not in GATEWAY_FAILURE_CODES
 
 
 def check_url(url: str, timeout: int) -> bool:
