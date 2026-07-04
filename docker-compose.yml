@@ -1,0 +1,15 @@
+services:
+  watchdog:
+    build: .
+    image: ghcr.io/tannerap/traeffik-sentinel:latest
+    container_name: traeffik-sentinel
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config/targets.json:/app/config/targets.json:ro
+    environment:
+      CONFIG_PATH: /app/config/targets.json
+      CHECK_INTERVAL: "300"
+      RETRY_WAIT: "60"
+      CURL_TIMEOUT: "15"
+      TRAEFIK_CONTAINER: traefik
