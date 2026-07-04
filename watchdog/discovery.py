@@ -16,6 +16,7 @@ ROUTER_ENTRYPOINTS_SUFFIX = ".entrypoints"
 ROUTER_TLS_SUFFIX = ".tls"
 ROUTER_PREFIX = "traefik.http.routers."
 
+WATCHDOG_ENABLE_LABELS = ("watchdog.enable", "traefik.watchdog.enable")
 HOST_PATTERN = re.compile(r"Host\(`([^`]+)`\)", re.IGNORECASE)
 PATH_PREFIX_PATTERN = re.compile(r"PathPrefix\(`([^`]+)`\)", re.IGNORECASE)
 SECURE_ENTRYPOINTS = frozenset({"websecure", "https", "tls"})
@@ -64,6 +65,13 @@ def _build_url(host: str, path_prefix: str | None, use_https: bool) -> str:
     return f"{scheme}://{host}{path_prefix or ''}"
 
 
+def _is_watchdog_enabled(labels: dict[str, str]) -> bool:
+    for key in WATCHDOG_ENABLE_LABELS:
+        if labels.get(key, "").lower() == "true":
+            return True
+    return False
+
+
 def _should_skip_container(
     container_name: str,
     labels: dict[str, str],
@@ -72,8 +80,13 @@ def _should_skip_container(
     if container_name in skip_names:
         return True
 
-    traefik_enable = labels.get("traefik.enable", "true").lower()
-    return traefik_enable == "false"
+    if labels.get("watchdog.enable", "").lower() == "false":
+        return True
+
+    if labels.get("traefik.enable", "true").lower() == "false":
+        return True
+
+    return not _is_watchdog_enabled(labels)
 
 
 def _extract_router_labels(labels: dict[str, str]) -> dict[str, dict[str, str | bool]]:

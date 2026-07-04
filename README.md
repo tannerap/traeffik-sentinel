@@ -1,6 +1,6 @@
 # traeffik-sentinel
 
-Docker-Watchdog-Container zur Überwachung öffentlicher Web-Dienste hinter Traefik. Ziele werden automatisch aus **Traefik Docker-Labels** erkannt.
+Docker-Watchdog für Web-Dienste hinter Traefik.
 
 ## Schnellstart
 
@@ -8,16 +8,13 @@ Docker-Watchdog-Container zur Überwachung öffentlicher Web-Dienste hinter Trae
 docker compose up -d --build
 ```
 
-## Funktionsweise
+Nur Container mit **`watchdog.enable=true`** werden überwacht. Portainer, Traefik und der Watchdog selbst werden ignoriert.
 
-1. Liest Traefik-Labels von laufenden Containern via Docker Socket
-2. Prüft die öffentlichen URLs per curl
-3. Bei Fehler: Container-Restart, nach 60s erneut prüfen, dann Traefik-Restart
-
-## Beispiel-Labels
+## Labels am App-Container
 
 ```yaml
 labels:
+  - watchdog.enable=true
   - traefik.enable=true
   - traefik.http.routers.myapp.rule=Host(`app.example.com`)
   - traefik.http.routers.myapp.entrypoints=websecure
@@ -31,18 +28,16 @@ labels:
 | `CHECK_INTERVAL` | `300` | Sekunden zwischen Prüfzyklen |
 | `RETRY_WAIT` | `60` | Wartezeit nach Container-Restart |
 | `CURL_TIMEOUT` | `15` | Timeout pro curl-Request |
-| `TRAEFIK_CONTAINER` | `traefik` | Traefik-Container (wird übersprungen) |
-| `WATCHDOG_CONTAINER` | `traeffik-sentinel` | Eigener Container (wird übersprungen) |
-| `DEFAULT_SCHEME` | `https` | Fallback-Schema |
+| `SKIP_CONTAINERS` | `traefik,portainer,traeffik-sentinel` | Nie überwachen/neu starten |
+| `ENABLE_TRAEFIK_RESTART` | `false` | Traefik bei anhaltendem Fehler neu starten |
+| `TRAEFIK_CONTAINER` | `traefik` | Name des Traefik-Containers |
+| `WATCHDOG_CONTAINER` | `traeffik-sentinel` | Eigener Container |
 
-## Image aus Registry
+## Portainer not erreichbar?
 
-```yaml
-services:
-  watchdog:
-    image: ghcr.io/tannerap/traeffik-sentinel:latest
-    container_name: traeffik-sentinel
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+Watchdog stoppen, dann Infrastruktur hochfahren:
+
+```bash
+docker stop traeffik-sentinel
+docker start traefik portainer
 ```
