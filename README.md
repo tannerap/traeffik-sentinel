@@ -16,6 +16,17 @@ Docker-Watchdog-Container zur Überwachung öffentlicher Web-Dienste hinter Trae
 docker compose up -d --build
 ```
 
+### Portainer
+
+Wenn beim Recreate `unable to find user watchdog` erscheint, den alten Container **löschen** und den Stack mit `portainer-stack.yml` neu deployen. Wichtig: `user: "0:0"` muss gesetzt sein.
+
+```bash
+# In Portainer: Stacks → Add stack → Web editor
+# Inhalt von portainer-stack.yml einfügen
+```
+
+Das Image enthält den `watchdog`-User als Fallback für alte Portainer-Konfigurationen. Der Entrypoint wechselt bei Bedarf per `gosu` auf root für den Docker-Socket-Zugriff.
+
 Der Watchdog erkennt automatisch alle Container mit Traefik-Labels wie:
 
 ```yaml
@@ -60,9 +71,15 @@ traefik.http.routers.api.entrypoints: websecure
 ## Voraussetzungen
 
 - Docker Socket (`/var/run/docker.sock`) muss gemountet sein (wie bei Traefik)
-- Der Container läuft explizit als root (`user: "0:0"`), damit der Socket-Zugriff funktioniert — auch wenn Portainer noch einen alten `watchdog`-User aus früheren Images übernommen hat
+- Der Prozess läuft als root (direkt oder via Entrypoint/`gosu`) für Socket-Zugriff
 - Überwachte Container müssen Traefik-Router-Labels mit `Host(...)` besitzen
 - URLs müssen von innerhalb des Watchdog-Containers erreichbar sein (öffentliche Traefik-Routen)
+
+### Portainer: `unable to find user watchdog`
+
+1. Container `traeffik-sentinel` in Portainer **entfernen** (nicht nur Recreate)
+2. Stack mit `user: "0:0"` neu deployen (siehe `portainer-stack.yml`)
+3. Neues Image ziehen: `docker pull ghcr.io/tannerap/traeffik-sentinel:latest`
 
 ## CI/CD
 

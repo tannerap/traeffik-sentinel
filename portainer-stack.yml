@@ -1,0 +1,18 @@
+# Portainer / Docker Stack
+# Copy this file into Portainer or use: docker compose -f portainer-stack.yml up -d
+
+services:
+  watchdog:
+    image: ghcr.io/tannerap/traeffik-sentinel:latest
+    container_name: traeffik-sentinel
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CHECK_INTERVAL: "300"
+      RETRY_WAIT: "60"
+      CURL_TIMEOUT: "15"
+      TRAEFIK_CONTAINER: traefik
+      WATCHDOG_CONTAINER: traeffik-sentinel
+      DEFAULT_SCHEME: https
