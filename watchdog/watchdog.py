@@ -186,6 +186,12 @@ def main() -> None:
         client = docker.from_env()
     except DockerException as exc:
         logger.error("Unable to connect to Docker socket: %s", exc)
+        if "Permission denied" in str(exc):
+            logger.error(
+                "Docker socket permission denied. Add the container to the host "
+                "docker group via group_add and set DOCKER_GID in .env, e.g. "
+                'DOCKER_GID=$(getent group docker | cut -d: -f3)'
+            )
         sys.exit(1)
 
     while True:

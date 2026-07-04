@@ -13,8 +13,11 @@ Docker-Watchdog-Container zur Überwachung öffentlicher Web-Dienste hinter Trae
 ## Schnellstart
 
 ```bash
+echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" > .env
 docker compose up -d --build
 ```
+
+Der Host-`docker`-Gruppe GID wird benötigt, damit der nicht-root Container auf `/var/run/docker.sock` zugreifen kann.
 
 Der Watchdog erkennt automatisch alle Container mit Traefik-Labels wie:
 
@@ -60,8 +63,24 @@ traefik.http.routers.api.entrypoints: websecure
 ## Voraussetzungen
 
 - Docker Socket (`/var/run/docker.sock`) muss gemountet sein
+- `DOCKER_GID` muss der GID der Host-`docker`-Gruppe entsprechen (siehe `.env.example`)
 - Überwachte Container müssen Traefik-Router-Labels mit `Host(...)` besitzen
 - URLs müssen von innerhalb des Watchdog-Containers erreichbar sein (öffentliche Traefik-Routen)
+
+### Docker-Socket Berechtigungen
+
+Der Container läuft als nicht-root User. Ohne passende Gruppenmitgliedschaft schlägt der Socket-Zugriff fehl:
+
+```
+PermissionError(13, 'Permission denied')
+```
+
+Lösung: `group_add` mit der Host-`docker`-GID setzen:
+
+```bash
+getent group docker   # z.B. docker:x:999:user
+echo "DOCKER_GID=999" > .env
+```
 
 ## CI/CD
 
@@ -81,6 +100,8 @@ services:
     container_name: traeffik-sentinel
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "999"  # Host docker group GID
     environment:
       TRAEFIK_CONTAINER: traefik
       WATCHDOG_CONTAINER: traeffik-sentinel
