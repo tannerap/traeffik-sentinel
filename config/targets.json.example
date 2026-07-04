@@ -1,0 +1,12 @@
+{
+  "targets": [
+    {
+      "url": "https://app.example.com",
+      "container": "my-app"
+    },
+    {
+      "url": "https://api.example.com/health",
+      "container": "my-api"
+    }
+  ]
+}
